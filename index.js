@@ -23,7 +23,7 @@ admin.initializeApp({
 });
 
 const db = admin.database();
-
+const PORT = process.env.PORT || 5000
 app.get("/", (req, res) => {
   res.json({
     message: format(new Date(), 'MM/dd/yyyy')
@@ -112,5 +112,138 @@ app.get("/getlevel/:id", (req, res) => {
 });
 
 
+app.post("/check", (req, res) => {
+  const now = format(new Date(), "MM/dd/yyyy");
+  let user;
+  const { answer, id } = req.body;
+  const userRef = db.ref(`/users/${id}`);
+  userRef
+    .once("value")
+    .then(snap => {
+      user = snap.val();
+      const userObject = user.levelsSolved.find(
+        e => e.day.toString() === now.toString()
+      );
+      if (userObject.solved === 2) {
+        return res.json({
+          message: "GAME_OVER"
+        });
+      } else {
+        const levelRef = db.ref(`/levels/${userObject.solved + 1}`);
+        levelRef
+          .once("value")
+          .then(snap => {
+            const level = { ...snap.val() };
+            const isLate = compareAsc(new Date(now), new Date(level.endTime));
+            if (isLate === 1) {
+              return res.json({
+                message: "LATE"
+              });
+            } else {
+              if (level.answer === answer) {
+                //if answer is correct
 
-exports.app = functions.https.onRequest(app);
+                //Modifying user solved levels array
+                let levels = [...user.levelsSolved];
+                const updatedLevel = {
+                  day: now,
+                  solved: userObject.solved + 1
+                };
+                levels.pop();
+                levels.push(updatedLevel);
+                userRef.update({
+                  ...user,
+                  levelsSolved: [...levels]
+                });
+
+                //updating leaderboard
+                console.log("SOLVED", updatedLevel.solved);
+                if (updatedLevel.solved === 1) {
+                  const day = format(new Date(), "iiii");
+                  console.log("DAY", day);
+                  console.log(
+                    "diff",
+                    differenceInMinutes(new Date(), new Date(level.endTime))
+                  );
+                  console.log("LEVEL", new Date(level.endTime));
+                  db.ref(`/leaderboard/${day}/${id}`)
+                    .set({
+                      name: user.gameName,
+                      image: user.image,
+                      solved: updatedLevel.solved,
+                      time: Math.abs(
+                        differenceInMinutes(new Date(), new Date(level.endTime))
+                      )
+                    })
+                    .then(() => {
+                      db.ref("/levels/2")
+                        .once("value")
+                        .then(data => {
+                          return res.json({
+                            message: "CORRECT",
+                            data: data.val()
+                          });
+                        })
+                        .catch(error => {
+                          console.log("ERROR", error);
+                        });
+                    })
+                    .catch(error => {
+                      console.log("ERROR", error);
+                    });
+                }
+
+                if (updatedLevel.solved === 2) {
+                  const day = format(new Date(), "iiii");
+                  let userLeaderboard;
+
+                  db.ref(`/leaderboard/${day}/${id}`)
+                    .once("value")
+                    .then(data => {
+                      userLeaderboard = data.val();
+                    })
+                    .then(() => {
+                      console.log("USERLB", userLeaderboard.time);
+                      db.ref(`/leaderboard/${day}/${id}`)
+                        .update({
+                          solved: 2,
+                          time:
+                            Math.abs(userLeaderboard.time) +
+                            Math.abs(
+                              differenceInMinutes(
+                                new Date(),
+                                new Date(level.endTime)
+                              )
+                            )
+                        })
+                        .then(() => {
+                          return res.json({
+                            message: "CORRECT",
+                            data: "GAME_OVER"
+                          });
+                        });
+                    })
+                    .catch(error => {
+                      console.log("ERROR", error);
+                    });
+                }
+              } else {
+                return res.json({
+                  message: "WRONG"
+                });
+              }
+            }
+          })
+          .catch(error => {
+            console.log("ERROR", error);
+          });
+      }
+    })
+    .catch(error => {
+      console.log("ERROR", error);
+    });
+});
+
+app.listen(PORT, () => {
+  console.log(`ON PORT ${PORT}`);
+});
