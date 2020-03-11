@@ -212,7 +212,7 @@ app.post("/check", (req, res) => {
                             Math.abs(
                               differenceInMinutes(
                                 new Date(),
-                                new Date(level.endTime)
+                                new Date(level.startTime)
                               )
                             )
                         })
