@@ -52,18 +52,66 @@ app.get("/getlevel/:id", (req, res) => {
               e => e.day.toString() === today.toString()
             );
             if (currentLevel) {
+              if (currentLevel.done === true) {
+                return res.json({
+                  message: "GAME_OVER"
+                });
+              }
               if (currentLevel.solved === 0) {
                 const level = levels.find(e => e.name === "level 1");
-                return res.json({
-                  message: "FOUND",
-                  data: level
-                });
+
+                //check if checkin time is more than end time of 1st level
+
+                if (compareAsc(new Date(), new Date(level.endTime)) === 1) {
+                  console.log("here")
+                  const level2 = levels.find(e => e.name === "level 2");
+                  if (compareAsc(new Date(), new Date(level2.endTime)) === 1) {
+                    console.log("YO", compareAsc(new Date(), new Date(level2.endTime)))
+                    return res.json({
+                      message: "GAME_OVER"
+                    });
+                  }
+                  else {
+                    console.log("here2")
+                    const level2 = levels.find(e => e.name === "level 2");
+                    return res.json({
+                      message: "FOUND",
+                      data: {
+
+                        ...level2,
+                        answer: null
+                      }
+                    });
+                  }
+                } else {
+                  const level = levels.find(e => e.name === "level 1");
+                  return res.json({
+                    message: "FOUND",
+                    data: {
+
+                      ...level,
+                      answer: null
+                    }
+                  });
+                }
+
               } else if (currentLevel.solved === 1) {
                 const level = levels.find(e => e.name === "level 2");
-                return res.json({
-                  message: "FOUND",
-                  data: level
-                });
+                if (compareAsc(new Date(), new Date(level.endTime)) === 1) {
+                  return res.json({
+                    message: "GAME_OVER"
+                  });
+                } else {
+                  const level = levels.find(e => e.name === "level 2");
+                  return res.json({
+                    message: "FOUND",
+                    data: {
+                      ...level,
+                      answer: null
+                    }
+                  });
+                }
+
               } else {
                 return res.json({
                   message: "GAME_OVER"
@@ -82,7 +130,10 @@ app.get("/getlevel/:id", (req, res) => {
               const level = levels.find(e => e.name === "level 1");
               return res.json({
                 message: "FOUND",
-                data: level
+                data: {
+                  ...level,
+                  answer: null
+                }
               });
             }
           } else {
@@ -112,7 +163,8 @@ app.get("/getlevel/:id", (req, res) => {
 });
 
 
-app.post("/check", (req, res) => {
+app.post("/check/:name", (req, res) => {
+  const levelName = req.params.name
   const now = format(new Date(), "MM/dd/yyyy");
   let user;
   const { answer, id } = req.body;
@@ -129,11 +181,14 @@ app.post("/check", (req, res) => {
           message: "GAME_OVER"
         });
       } else {
-        const levelRef = db.ref(`/levels/${userObject.solved + 1}`);
+        const levelRef = db.ref(`/levels/`);
         levelRef
           .once("value")
           .then(snap => {
-            const level = { ...snap.val() };
+            const dlevels = snap.val()
+            const levels = [dlevels[1], dlevels[2]]
+            const level = levels.find(e => e.name === levelName)
+
             const isLate = compareAsc(new Date(now), new Date(level.endTime));
             if (isLate === 1) {
               return res.json({
@@ -145,10 +200,17 @@ app.post("/check", (req, res) => {
 
                 //Modifying user solved levels array
                 let levels = [...user.levelsSolved];
-                const updatedLevel = {
+                let updatedLevel = {
                   day: now,
-                  solved: userObject.solved + 1
+                  solved: userObject.solved + 1,
                 };
+                if (levelName === "level 2") {
+                  updatedLevel = {
+                    day: now,
+                    solved: userObject.solved + 1,
+                    done: true
+                  };
+                }
                 levels.pop();
                 levels.push(updatedLevel);
                 userRef.update({
@@ -158,7 +220,7 @@ app.post("/check", (req, res) => {
 
                 //updating leaderboard
                 console.log("SOLVED", updatedLevel.solved);
-                if (updatedLevel.solved === 1) {
+                if (levelName === "level 1") {
                   const day = format(new Date(), "iiii");
                   console.log("DAY", day);
                   console.log(
@@ -166,13 +228,18 @@ app.post("/check", (req, res) => {
                     differenceInMinutes(new Date(), new Date(level.endTime))
                   );
                   console.log("LEVEL", new Date(level.endTime));
+                  console.log("DIFFTIME", differenceInMinutes(new Date(level.startTime),
+                    new Date()))
+                  console.log("LEVLE START TIME", level.startTime)
+                  console.log("LEVEL", level)
                   db.ref(`/leaderboard/${day}/${id}`)
                     .set({
                       name: user.gameName,
                       image: user.image,
                       solved: updatedLevel.solved,
                       time: Math.abs(
-                        differenceInMinutes(new Date(), new Date(level.endTime))
+                        differenceInMinutes(new Date(), new Date(level.startTime))
+
                       )
                     })
                     .then(() => {
@@ -193,39 +260,66 @@ app.post("/check", (req, res) => {
                     });
                 }
 
-                if (updatedLevel.solved === 2) {
+                if (levelName === "level 2") {
                   const day = format(new Date(), "iiii");
                   let userLeaderboard;
 
-                  db.ref(`/leaderboard/${day}/${id}`)
-                    .once("value")
-                    .then(data => {
-                      userLeaderboard = data.val();
-                    })
-                    .then(() => {
-                      console.log("USERLB", userLeaderboard.time);
-                      db.ref(`/leaderboard/${day}/${id}`)
-                        .update({
-                          solved: 2,
-                          time:
-                            Math.abs(userLeaderboard.time) +
-                            Math.abs(
-                              differenceInMinutes(
-                                new Date(),
-                                new Date(level.startTime)
-                              )
+                  if (updatedLevel.solved === 1) {
+
+                    db.ref(`/leaderboard/${day}/${id}`)
+                      .once("value")
+                      .then(data => {
+                        userLeaderboard = data.val();
+                      })
+                      .then(() => {
+                        db.ref(`/leaderboard/${day}/${id}`)
+                          .set({
+                            name: user.gameName,
+                            image: user.image,
+                            solved: updatedLevel.solved,
+                            time: Math.abs(
+                              differenceInMinutes(new Date(), new Date(level.startTime))
                             )
-                        })
-                        .then(() => {
-                          return res.json({
-                            message: "CORRECT",
-                            data: "GAME_OVER"
+
+
+                          })
+                          .then(() => {
+                            return res.json({
+                              message: "CORRECT",
+                              data: "GAME_OVER"
+                            });
                           });
-                        });
-                    })
-                    .catch(error => {
-                      console.log("ERROR", error);
-                    });
+                      })
+                      .catch(error => {
+                        console.log("ERROR", error);
+                      });
+                  }
+                  if (updatedLevel.solved === 2) {
+                    db.ref(`/leaderboard/${day}/${id}`)
+                      .once("value")
+                      .then(data => {
+                        userLeaderboard = data.val();
+                      })
+                      .then(() => {
+                        db.ref(`/leaderboard/${day}/${id}`)
+                          .update({
+                            solved: updatedLevel.solved,
+                            time: Math.abs(userLeaderboard.time) +
+                              Math.abs(
+                                differenceInMinutes(new Date(), new Date(level.startTime))
+                              )
+                          })
+                          .then(() => {
+                            return res.json({
+                              message: "CORRECT",
+                              data: "GAME_OVER"
+                            });
+                          });
+                      })
+                      .catch(error => {
+                        console.log("ERROR", error);
+                      });
+                  }
                 }
               } else {
                 return res.json({
