@@ -57,16 +57,9 @@ app.get("/getlevel/:id",async (req, res) => {
 
     try {
 
-        let levels = req.levels ? JSON.parse(req.levels) : null
-
-        console.log("LEVELS", levels)
-
         const userFetch = await db.ref(`/users/${id}`).once("value");
-        if (levels === null) {
-            const levelsFetch = await db.ref("/levels/").once("value")
-            levels = levelsFetch.val();
-            // rClient.setex("levels", 500, JSON.stringify(levels));
-        }
+        const levelsFetch = await db.ref("/levels/").once("value")
+        const levels = levelsFetch.val();
         const user = userFetch.val();
 
         console.log("USER",user)
@@ -105,12 +98,9 @@ app.post("/check/:name", async (req, res) => {
     const { id, answer } = req.body;
 
     try {
-        let levels = JSON.parse(req.levels) || null;
-        if (levels === null) {
-            const levelsFetch = await db.ref("/levels/").once("value")
-            levels = levelsFetch.val();
-            // rClient.setex("levels", 500, JSON.stringify(levels));
-        }
+      
+        const levelsFetch = await db.ref("/levels/").once("value")
+        const levels = levelsFetch.val();
         const userFetch = await db.ref(`/users/${id}`).once("value");
         const user = userFetch.val();
         const curLevel = levels[user.levelsSolved];
