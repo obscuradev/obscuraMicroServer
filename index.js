@@ -1,6 +1,6 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const redis = require('redis');
+// const redis = require('redis');
 const { format, compareAsc, differenceInMinutes } = require("date-fns");
 var bodyParser = require("body-parser");
 const cors = require("cors")({
@@ -8,8 +8,8 @@ const cors = require("cors")({
 });
 var serviceAccount = require("./key.json");
 const express = require("express");
-const REDIS_PORT = process.env.REDIS_PORT || 6379;
-const rClient = redis.createClient(REDIS_PORT);
+// const REDIS_PORT = process.env.REDIS_PORT || 6379;
+// const rClient = redis.createClient(REDIS_PORT);
 
 const app = express();
 app.use(
@@ -29,21 +29,21 @@ const db = admin.database();
 const PORT = process.env.PORT || 5000
 
 //Cache middleware
-function cache(req, res, next) {
-    // rClient.del("levels", (err, res) => {
-    //     console.log("DONE DEL REDIS")
-    // })
-    rClient.get("levels", (err, data) => {
-        if (err) throw err;
+// function cache(req, res, next) {
+//     // rClient.del("levels", (err, res) => {
+//     //     console.log("DONE DEL REDIS")
+//     // })
+//     rClient.get("levels", (err, data) => {
+//         if (err) throw err;
 
-        if (data !== null) {
-            req.levels = data;
-            next();
-        } else {
-            next();
-        }
-    })
-}
+//         if (data !== null) {
+//             req.levels = data;
+//             next();
+//         } else {
+//             next();
+//         }
+//     })
+// }
 
 app.get("/", (req, res) => {
     res.json({
@@ -52,7 +52,7 @@ app.get("/", (req, res) => {
     });
 });
 
-app.get("/getlevel/:id", cache, async (req, res) => {
+app.get("/getlevel/:id",async (req, res) => {
     const id = req.params.id;
 
     try {
@@ -65,11 +65,11 @@ app.get("/getlevel/:id", cache, async (req, res) => {
         if (levels === null) {
             const levelsFetch = await db.ref("/levels/").once("value")
             levels = levelsFetch.val();
-            rClient.setex("levels", 500, JSON.stringify(levels));
+            // rClient.setex("levels", 500, JSON.stringify(levels));
         }
         const user = userFetch.val();
 
-        console.log(user)
+        console.log("USER",user)
 
         const levelToSend = levels[user.levelsSolved];
         console.log(levelToSend)
@@ -100,7 +100,7 @@ app.get("/getlevel/:id", cache, async (req, res) => {
 });
 
 
-app.post("/check/:name", cache, async (req, res) => {
+app.post("/check/:name", async (req, res) => {
 
     const { id, answer } = req.body;
 
@@ -109,7 +109,7 @@ app.post("/check/:name", cache, async (req, res) => {
         if (levels === null) {
             const levelsFetch = await db.ref("/levels/").once("value")
             levels = levelsFetch.val();
-            rClient.setex("levels", 500, JSON.stringify(levels));
+            // rClient.setex("levels", 500, JSON.stringify(levels));
         }
         const userFetch = await db.ref(`/users/${id}`).once("value");
         const user = userFetch.val();
